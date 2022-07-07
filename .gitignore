@@ -8,11 +8,15 @@ Desktop.ini
 /Recordings
 /Temp
 /UserSettings
+/obj
 
 /Plugin/*.o
 /Plugin/*.so
 /Plugin/*.a
 /Plugin/*.bundle
 /Plugin/*.xcodeproj
+
+*.sln
+*.csproj
 
 *.mp4
