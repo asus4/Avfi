@@ -11,6 +11,8 @@ static AVAssetWriterInput* _writerVideoInput;
 static AVAssetWriterInputPixelBufferAdaptor* _bufferAdaptor;
 static AVAssetWriterInput* _writerMetadataInput;
 static AVAssetWriterInputMetadataAdaptor* _metadataAdaptor;
+static double _frameCount;
+#define kMETADATA_ID_RAW @"mdta/com.github.asus4.avfi.raw"
 
 extern void Avfi_StartRecording(const char* filePath, int width, int height)
 {
@@ -60,7 +62,7 @@ extern void Avfi_StartRecording(const char* filePath, int width, int height)
     // Metadata adaptor setup
     CMFormatDescriptionRef metadataFormatDescription = NULL;
     NSArray *specs = @[
-       @{(__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_Identifier : @"mdta/com.example.circle.radius",
+       @{(__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_Identifier : kMETADATA_ID_RAW,
          (__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_DataType : (__bridge NSString *)kCMMetadataBaseDataType_RawData},
     ];
     OSStatus metadataStatus = CMMetadataFormatDescriptionCreateWithMetadataSpecifications(kCFAllocatorDefault, kCMMetadataFormatType_Boxed, (__bridge CFArrayRef)specs, &metadataFormatDescription);
@@ -84,6 +86,7 @@ extern void Avfi_StartRecording(const char* filePath, int width, int height)
     }
 
     [_writer startSessionAtSourceTime:kCMTimeZero];
+    _frameCount = 0;
 }
 
 extern void Avfi_AppendFrame(const void* source, uint32_t size, double time)
@@ -126,11 +129,16 @@ extern void Avfi_AppendFrame(const void* source, uint32_t size, double time)
                  withPresentationTime:CMTimeMakeWithSeconds(time, 240)];
     
     // Metadata submission
-//    AVMetadataItem* metadataItem;
-//    CMTimeRange metadataTime = CMTimeRangeMake(CMTimeMakeWithSeconds(time, 240), CMTimeMakeWithSeconds(time+0.16, 240));
-//    AVTimedMetadataGroup* metadataGroup = [[AVTimedMetadataGroup alloc] initWithItems:@[metadataItem]
-//                                                                            timeRange:metadataTime];
-//    [_metadataAdaptor appendTimedMetadataGroup:metadataGroup];
+    AVMutableMetadataItem* metadataItem = [AVMutableMetadataItem metadataItem];
+	metadataItem.identifier = kMETADATA_ID_RAW;
+	metadataItem.dataType = (__bridge NSString *)kCMMetadataBaseDataType_RawData;
+    const double raw_arr[2] = {time, (double)_frameCount++};
+    metadataItem.value = [NSData dataWithBytes:raw_arr length:sizeof(raw_arr)];
+
+    CMTimeRange metadataTime = CMTimeRangeMake(CMTimeMakeWithSeconds(time, 240), kCMTimeInvalid);
+    AVTimedMetadataGroup* metadataGroup = [[AVTimedMetadataGroup alloc] initWithItems:@[metadataItem]
+                                                                            timeRange:metadataTime];
+    [_metadataAdaptor appendTimedMetadataGroup:metadataGroup];
 
 
     CVPixelBufferRelease(buffer);
