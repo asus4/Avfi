@@ -39,9 +39,8 @@ extern void Avfi_StartRecording(const char* filePath, int width, int height)
          AVVideoWidthKey: @(width),
         AVVideoHeightKey: @(height) };
 
-    _writerInput =
-      [[AVAssetWriterInput assetWriterInputWithMediaType: AVMediaTypeVideo
-                                          outputSettings: settings] retain];
+    _writerInput = [AVAssetWriterInput assetWriterInputWithMediaType: AVMediaTypeVideo
+                                                      outputSettings: settings];
     _writerInput.expectsMediaDataInRealTime = true;
 
     [_writer addInput:_writerInput];
@@ -52,10 +51,8 @@ extern void Avfi_StartRecording(const char* filePath, int width, int height)
                    (NSString*)kCVPixelBufferWidthKey: @(width),
                   (NSString*)kCVPixelBufferHeightKey: @(height) };
 
-    _bufferAdaptor =
-      [[AVAssetWriterInputPixelBufferAdaptor
-         assetWriterInputPixelBufferAdaptorWithAssetWriterInput: _writerInput
-                                    sourcePixelBufferAttributes: attribs] retain];
+    _bufferAdaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput: _writerInput
+                                                                                      sourcePixelBufferAttributes: attribs];
 
     // Recording start
     if (![_writer startWriting])
@@ -121,10 +118,9 @@ extern void Avfi_EndRecording(void)
 
 #if TARGET_OS_IOS
 
-    NSString* path = [_writer.outputURL.path retain];
+    NSString* path = _writer.outputURL.path;
     [_writer finishWritingWithCompletionHandler: ^{
         UISaveVideoAtPathToSavedPhotosAlbum(path, nil, nil, nil);
-        [path release];
     }];
 
 #else
@@ -132,10 +128,6 @@ extern void Avfi_EndRecording(void)
     [_writer finishWritingWithCompletionHandler: ^{}];
 
 #endif
-
-    [_writer release];
-    [_writerInput release];
-    [_bufferAdaptor release];
 
     _writer = NULL;
     _writerInput = NULL;
