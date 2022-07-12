@@ -21,3 +21,4 @@ Desktop.ini
 *.csproj
 
 *.mp4
+!Assets/StreamingAssets/*.mp4

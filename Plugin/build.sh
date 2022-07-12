@@ -14,14 +14,14 @@ rm *.o *.so *.a *.bundle
 
 set -x
 
-gcc -target x86_64-apple-macos10.13 $CFLAGS $MAC_ARGS Avfi.m $LIBS -o x86_64.so
-gcc -target  arm64-apple-macos10.13 $CFLAGS $MAC_ARGS Avfi.m $LIBS -o arm64.so
+gcc -target x86_64-apple-macos10.13 $CFLAGS $MAC_ARGS Avfi.m AvfiMetaPlayer.m $LIBS -o x86_64.so
+gcc -target  arm64-apple-macos10.13 $CFLAGS $MAC_ARGS Avfi.m AvfiMetaPlayer.m $LIBS -o arm64.so
 
-gcc $CFLAGS $IOS_ARGS -c Avfi.m
+gcc $CFLAGS $IOS_ARGS -c Avfi.m AvfiMetaPlayer.m
 
 lipo -create -output Avfi.bundle x86_64.so arm64.so
 
-ar -crv libAvfi.a Avfi.o
+ar -crv libAvfi.a Avfi.o AvfiMetaPlayer.o
 
 DST="../Packages/jp.keijiro.avfi/Runtime/Plugins"
 cp Avfi.bundle $DST

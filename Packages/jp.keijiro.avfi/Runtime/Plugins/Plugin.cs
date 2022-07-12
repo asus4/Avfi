@@ -22,6 +22,24 @@ static class Plugin
     [DllImport(DllName, EntryPoint = "Avfi_EndRecording")]
     public static extern
       void EndRecording();
+
+    #region Metadata
+    [DllImport(DllName, EntryPoint = "Avfi_LoadMetadata")]
+    public static extern
+      void LoadMetadata(string filePath);
+    
+    [DllImport(DllName, EntryPoint = "Avfi_UnloadMetadata")]
+    public static extern
+      void UnloadMetadata();
+    
+    [DllImport(DllName, EntryPoint = "Avfi_GetBufferSize")]
+    public static extern
+      uint GetBufferSize();
+    
+    [DllImport(DllName, EntryPoint = "Avfi_PeekMetadata")]
+    public static extern
+      uint PeekMetadata(double time, IntPtr metadata);
+    #endregion // Metadata
 }
 
 } // namespace Avfi
