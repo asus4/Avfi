@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Rendering;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using IntPtr = System.IntPtr;
 
@@ -13,6 +14,8 @@ public sealed class VideoRecorder : MonoBehaviour
 
     public RenderTexture source
       { get => _source; set => ChangeSource(value); }
+
+    public NativeArray<byte> Metadata { get; set; }
 
     #endregion
 
@@ -67,7 +70,17 @@ public sealed class VideoRecorder : MonoBehaviour
         if (!IsRecording) return;
         var data = request.GetData<byte>(0);
         var ptr = (IntPtr)NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(data);
-        Plugin.AppendFrame(ptr, (uint)data.Length, _timeQueue.Dequeue());
+
+        if(Metadata.IsCreated)
+        {
+            // TODO: Dequeue from async queue. 
+            var metadataPtr = (IntPtr)NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(Metadata);
+            Plugin.AppendFrame(ptr, (uint)data.Length, metadataPtr, (uint)Metadata.Length, _timeQueue.Dequeue());
+        }
+        else
+        {
+            Plugin.AppendFrame(ptr, (uint)data.Length, IntPtr.Zero, 0, _timeQueue.Dequeue());
+        }
     }
 
     #endregion

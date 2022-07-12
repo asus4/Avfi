@@ -3,16 +3,21 @@ Desktop.ini
 .DS_Store
 *.swp
 
+/Build
 /Library
 /Logs
 /Recordings
 /Temp
 /UserSettings
+/obj
 
 /Plugin/*.o
 /Plugin/*.so
 /Plugin/*.a
 /Plugin/*.bundle
 /Plugin/*.xcodeproj
+
+*.sln
+*.csproj
 
 *.mp4

@@ -17,7 +17,7 @@ static class Plugin
 
     [DllImport(DllName, EntryPoint = "Avfi_AppendFrame")]
     public static extern
-      void AppendFrame(IntPtr pointer, uint size, double time);
+      void AppendFrame(IntPtr pointer, uint size, IntPtr metadata, uint metadataSize, double time);
 
     [DllImport(DllName, EntryPoint = "Avfi_EndRecording")]
     public static extern
