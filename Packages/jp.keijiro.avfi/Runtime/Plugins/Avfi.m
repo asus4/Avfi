@@ -89,7 +89,10 @@ extern void Avfi_StartRecording(const char* filePath, int width, int height)
     _frameCount = 0;
 }
 
-extern void Avfi_AppendFrame(const void* source, uint32_t size, double time)
+extern void Avfi_AppendFrame(
+    const void* source, uint32_t size,
+    const void* metadata, uint32_t metadataSize,
+    double time)
 {
     if (!_writer)
     {
@@ -128,18 +131,19 @@ extern void Avfi_AppendFrame(const void* source, uint32_t size, double time)
     [_bufferAdaptor appendPixelBuffer:buffer
                  withPresentationTime:CMTimeMakeWithSeconds(time, 240)];
     
-    // Metadata submission
-    AVMutableMetadataItem* metadataItem = [AVMutableMetadataItem metadataItem];
-	metadataItem.identifier = kMETADATA_ID_RAW;
-	metadataItem.dataType = (__bridge NSString *)kCMMetadataBaseDataType_RawData;
-    const double raw_arr[2] = {time, (double)_frameCount++};
-    metadataItem.value = [NSData dataWithBytes:raw_arr length:sizeof(raw_arr)];
+    if (metadataSize > 0)
+    {
+        // Metadata submission
+        AVMutableMetadataItem* metadataItem = [AVMutableMetadataItem metadataItem];
+        metadataItem.identifier = kMETADATA_ID_RAW;
+        metadataItem.dataType = (__bridge NSString *)kCMMetadataBaseDataType_RawData;
+        metadataItem.value = [NSData dataWithBytes:metadata length:metadataSize];
 
-    CMTimeRange metadataTime = CMTimeRangeMake(CMTimeMakeWithSeconds(time, 240), kCMTimeInvalid);
-    AVTimedMetadataGroup* metadataGroup = [[AVTimedMetadataGroup alloc] initWithItems:@[metadataItem]
-                                                                            timeRange:metadataTime];
-    [_metadataAdaptor appendTimedMetadataGroup:metadataGroup];
-
+        CMTimeRange metadataTime = CMTimeRangeMake(CMTimeMakeWithSeconds(time, 240), kCMTimeInvalid);
+        AVTimedMetadataGroup* metadataGroup = [[AVTimedMetadataGroup alloc] initWithItems:@[metadataItem]
+                                                                                timeRange:metadataTime];
+        [_metadataAdaptor appendTimedMetadataGroup:metadataGroup];
+    }
 
     CVPixelBufferRelease(buffer);
 }

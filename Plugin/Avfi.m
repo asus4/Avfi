@@ -1,4 +1,5 @@
 #import <AVFoundation/AVFoundation.h>
+#import <CoreMedia/CMMetadata.h>
 
 #if TARGET_OS_IOS
 #import <UIKit/UIKit.h>
@@ -6,8 +7,12 @@
 
 // Internal objects
 static AVAssetWriter* _writer;
-static AVAssetWriterInput* _writerInput;
+static AVAssetWriterInput* _writerVideoInput;
 static AVAssetWriterInputPixelBufferAdaptor* _bufferAdaptor;
+static AVAssetWriterInput* _writerMetadataInput;
+static AVAssetWriterInputMetadataAdaptor* _metadataAdaptor;
+static double _frameCount;
+#define kMETADATA_ID_RAW @"mdta/com.github.asus4.avfi.raw"
 
 extern void Avfi_StartRecording(const char* filePath, int width, int height)
 {
@@ -39,12 +44,11 @@ extern void Avfi_StartRecording(const char* filePath, int width, int height)
          AVVideoWidthKey: @(width),
         AVVideoHeightKey: @(height) };
 
-    _writerInput =
-      [[AVAssetWriterInput assetWriterInputWithMediaType: AVMediaTypeVideo
-                                          outputSettings: settings] retain];
-    _writerInput.expectsMediaDataInRealTime = true;
+    _writerVideoInput = [AVAssetWriterInput assetWriterInputWithMediaType: AVMediaTypeVideo
+                                                      outputSettings: settings];
+    _writerVideoInput.expectsMediaDataInRealTime = true;
 
-    [_writer addInput:_writerInput];
+    [_writer addInput:_writerVideoInput];
 
     // Pixel buffer adaptor setup
     NSDictionary* attribs =
@@ -52,11 +56,28 @@ extern void Avfi_StartRecording(const char* filePath, int width, int height)
                    (NSString*)kCVPixelBufferWidthKey: @(width),
                   (NSString*)kCVPixelBufferHeightKey: @(height) };
 
-    _bufferAdaptor =
-      [[AVAssetWriterInputPixelBufferAdaptor
-         assetWriterInputPixelBufferAdaptorWithAssetWriterInput: _writerInput
-                                    sourcePixelBufferAttributes: attribs] retain];
-
+    _bufferAdaptor = [AVAssetWriterInputPixelBufferAdaptor assetWriterInputPixelBufferAdaptorWithAssetWriterInput: _writerVideoInput
+                                                                                      sourcePixelBufferAttributes: attribs];
+    
+    // Metadata adaptor setup
+    CMFormatDescriptionRef metadataFormatDescription = NULL;
+    NSArray *specs = @[
+       @{(__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_Identifier : kMETADATA_ID_RAW,
+         (__bridge NSString *)kCMMetadataFormatDescriptionMetadataSpecificationKey_DataType : (__bridge NSString *)kCMMetadataBaseDataType_RawData},
+    ];
+    OSStatus metadataStatus = CMMetadataFormatDescriptionCreateWithMetadataSpecifications(kCFAllocatorDefault, kCMMetadataFormatType_Boxed, (__bridge CFArrayRef)specs, &metadataFormatDescription);
+    if(metadataStatus) {
+        NSLog(@"CMMetadataFormatDescriptionCreateWithMetadataSpecifications failed with error %d", (int)metadataStatus);
+    }
+    _writerMetadataInput = [AVAssetWriterInput assetWriterInputWithMediaType:AVMediaTypeMetadata
+                                                              outputSettings:nil
+                                                            sourceFormatHint:metadataFormatDescription];
+    _metadataAdaptor = [AVAssetWriterInputMetadataAdaptor assetWriterInputMetadataAdaptorWithAssetWriterInput: _writerMetadataInput];
+    _writerMetadataInput.expectsMediaDataInRealTime = YES;
+    
+    [_writerMetadataInput addTrackAssociationWithTrackOfInput:_writerVideoInput type:AVTrackAssociationTypeMetadataReferent];
+    [_writer addInput:_writerMetadataInput];
+    
     // Recording start
     if (![_writer startWriting])
     {
@@ -65,9 +86,13 @@ extern void Avfi_StartRecording(const char* filePath, int width, int height)
     }
 
     [_writer startSessionAtSourceTime:kCMTimeZero];
+    _frameCount = 0;
 }
 
-extern void Avfi_AppendFrame(const void* source, uint32_t size, double time)
+extern void Avfi_AppendFrame(
+    const void* source, uint32_t size,
+    const void* metadata, uint32_t metadataSize,
+    double time)
 {
     if (!_writer)
     {
@@ -75,7 +100,7 @@ extern void Avfi_AppendFrame(const void* source, uint32_t size, double time)
         return;
     }
 
-    if (!_writerInput.isReadyForMoreMediaData)
+    if (!_writerVideoInput.isReadyForMoreMediaData || !_writerMetadataInput.isReadyForMoreMediaData)
     {
         NSLog(@"Writer is not ready.");
         return;
@@ -105,6 +130,20 @@ extern void Avfi_AppendFrame(const void* source, uint32_t size, double time)
     // Buffer submission
     [_bufferAdaptor appendPixelBuffer:buffer
                  withPresentationTime:CMTimeMakeWithSeconds(time, 240)];
+    
+    if (metadataSize > 0)
+    {
+        // Metadata submission
+        AVMutableMetadataItem* metadataItem = [AVMutableMetadataItem metadataItem];
+        metadataItem.identifier = kMETADATA_ID_RAW;
+        metadataItem.dataType = (__bridge NSString *)kCMMetadataBaseDataType_RawData;
+        metadataItem.value = [NSData dataWithBytes:metadata length:metadataSize];
+
+        CMTimeRange metadataTime = CMTimeRangeMake(CMTimeMakeWithSeconds(time, 240), kCMTimeInvalid);
+        AVTimedMetadataGroup* metadataGroup = [[AVTimedMetadataGroup alloc] initWithItems:@[metadataItem]
+                                                                                timeRange:metadataTime];
+        [_metadataAdaptor appendTimedMetadataGroup:metadataGroup];
+    }
 
     CVPixelBufferRelease(buffer);
 }
@@ -117,14 +156,13 @@ extern void Avfi_EndRecording(void)
         return;
     }
 
-    [_writerInput markAsFinished];
+    [_writerVideoInput markAsFinished];
 
 #if TARGET_OS_IOS
 
-    NSString* path = [_writer.outputURL.path retain];
+    NSString* path = _writer.outputURL.path;
     [_writer finishWritingWithCompletionHandler: ^{
         UISaveVideoAtPathToSavedPhotosAlbum(path, nil, nil, nil);
-        [path release];
     }];
 
 #else
@@ -133,11 +171,9 @@ extern void Avfi_EndRecording(void)
 
 #endif
 
-    [_writer release];
-    [_writerInput release];
-    [_bufferAdaptor release];
-
     _writer = NULL;
-    _writerInput = NULL;
+    _writerVideoInput = NULL;
     _bufferAdaptor = NULL;
+    _writerMetadataInput = NULL;
+    _metadataAdaptor = NULL;
 }
