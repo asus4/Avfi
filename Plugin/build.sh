@@ -5,10 +5,10 @@ CFLAGS="-O2 -Wall"
 LIBS="-framework Foundation -framework AVFoundation"
 LIBS+=" -framework CoreMedia -framework CoreVideo -framework QuartzCore"
 
-MAC_ARGS="-shared -rdynamic -fPIC"
+MAC_ARGS="-shared -rdynamic -fPIC -fobjc-arc"
 
 IOS_ROOT=`xcrun --sdk iphoneos --show-sdk-path`
-IOS_ARGS="--sysroot $IOS_ROOT -isysroot $IOS_ROOT -fembed-bitcode"
+IOS_ARGS="--sysroot $IOS_ROOT -isysroot $IOS_ROOT -fembed-bitcode -fobjc-arc"
 
 rm *.o *.so *.a *.bundle
 
