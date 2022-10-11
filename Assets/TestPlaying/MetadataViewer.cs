@@ -4,29 +4,29 @@ using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
-using IntPtr = System.IntPtr;
-sealed class MetadataViewer : MonoBehaviour
+
+public sealed class MetadataViewer : MonoBehaviour
 {
     [SerializeField] Text _label = null;
 
     [SerializeField] VideoPlayer _player = null;
-    
+
     [SerializeField] string _videoPath = "sample.mp4";
     MetadataPlayer _metadataPlayer = null;
 
-    void Start()
+    private void Start()
     {
         string path = Path.Combine(Application.streamingAssetsPath, _videoPath);
         _player.url = path;
         _metadataPlayer = new MetadataPlayer(path);
     }
 
-    void OnDestroy()
+    private void OnDestroy()
     {
         _metadataPlayer?.Dispose();
     }
 
-    unsafe void Update()
+    private unsafe void Update()
     {
         var slice = _metadataPlayer.PeekMetadata(_player.time);
 

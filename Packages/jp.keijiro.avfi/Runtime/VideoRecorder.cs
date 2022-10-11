@@ -4,107 +4,118 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using IntPtr = System.IntPtr;
 
-namespace Avfi {
-
-public sealed class VideoRecorder : MonoBehaviour
+namespace Avfi
 {
-    #region Editable attributes
-
-    [SerializeField] RenderTexture _source = null;
-
-    public RenderTexture source
-      { get => _source; set => ChangeSource(value); }
-
-    public NativeArray<byte> Metadata { get; set; }
-
-    #endregion
-
-    #region Public properties and methods
-
-    public bool IsRecording
-      { get; private set; }
-
-    public void StartRecording()
+    public sealed class VideoRecorder : System.IDisposable
     {
-        var path = PathUtil.GetTemporaryFilePath();
-        Plugin.StartRecording(path, _source.width, _source.height);
+        #region Editable attributes
 
-        _timeQueue.Clear();
-        IsRecording = true;
-    }
+        private RenderTexture _source = null;
 
-    public void EndRecording()
-    {
-        AsyncGPUReadback.WaitAllRequests();
-        Plugin.EndRecording();
-        IsRecording = false;
-    }
-
-    #endregion
-
-    #region Private objects
-
-    RenderTexture _buffer;
-    TimeQueue _timeQueue = new TimeQueue();
-
-    void ChangeSource(RenderTexture rt)
-    {
-        if (IsRecording)
+        public RenderTexture Source
         {
-            Debug.LogError("Can't change the source while recording.");
-            return;
+            get => _source;
+            set => ChangeSource(value);
         }
 
-        if (_buffer != null) Destroy(_buffer);
+        #endregion
 
-        _source = rt;
-        _buffer = new RenderTexture(rt.width, rt.height, 0);
-    }
+        #region Public properties and methods
 
-    #endregion
+        public bool IsRecording { get; private set; }
 
-    #region Async GPU readback
-
-    unsafe void OnSourceReadback(AsyncGPUReadbackRequest request)
-    {
-        if (!IsRecording) return;
-        var data = request.GetData<byte>(0);
-        var ptr = (IntPtr)NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(data);
-
-        if(Metadata.IsCreated)
+        public VideoRecorder(RenderTexture source)
         {
-            // TODO: Dequeue from async queue. 
-            var metadataPtr = (IntPtr)NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(Metadata);
-            Plugin.AppendFrame(ptr, (uint)data.Length, metadataPtr, (uint)Metadata.Length, _timeQueue.Dequeue());
+            ChangeSource(source);
         }
-        else
+
+        public void Dispose()
         {
-            Plugin.AppendFrame(ptr, (uint)data.Length, IntPtr.Zero, 0, _timeQueue.Dequeue());
+            if (IsRecording)
+            {
+                EndRecording();
+            }
+            Object.Destroy(_buffer);
         }
+
+        public void Update(NativeArray<byte> metadata)
+        {
+            if (!IsRecording) { return; }
+            if (!_metaQueue.TryEnqueueNow(metadata)) { return; }
+
+            Graphics.Blit(_source, _buffer, new Vector2(1, -1), new Vector2(0, 1));
+            AsyncGPUReadback.Request(_buffer, 0, OnSourceReadback);
+        }
+
+        public void StartRecording()
+        {
+            var path = PathUtil.GetTemporaryFilePath();
+            Plugin.StartRecording(path, _source.width, _source.height);
+
+            _metaQueue.Clear();
+            IsRecording = true;
+        }
+
+        public void EndRecording()
+        {
+            AsyncGPUReadback.WaitAllRequests();
+            Plugin.EndRecording();
+            IsRecording = false;
+        }
+
+        #endregion
+
+        #region Private objects
+
+        private RenderTexture _buffer;
+        private readonly MetaQueue _metaQueue = new();
+
+        private void ChangeSource(RenderTexture rt)
+        {
+            if (IsRecording)
+            {
+                Debug.LogError("Can't change the source while recording.");
+                return;
+            }
+
+            if (_buffer != null)
+            {
+                Object.Destroy(_buffer);
+            }
+
+            _source = rt;
+            _buffer = new RenderTexture(rt.width, rt.height, 0);
+        }
+
+        #endregion
+
+        #region Async GPU readback
+
+        private unsafe void OnSourceReadback(AsyncGPUReadbackRequest request)
+        {
+            if (!IsRecording)
+            {
+                return;
+            }
+
+            // Get pixel buffer
+            var data = request.GetData<byte>(0);
+            var ptr = (IntPtr)NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(data);
+
+            var (time, metadata) = _metaQueue.Dequeue();
+            if (metadata.IsCreated)
+            {
+                var metadataPtr = (IntPtr)NativeArrayUnsafeUtility.GetUnsafeReadOnlyPtr(metadata);
+                Plugin.AppendFrame(ptr, (uint)data.Length, metadataPtr, (uint)metadata.Length, time);
+                metadata.Dispose();
+            }
+            else
+            {
+                Plugin.AppendFrame(ptr, (uint)data.Length, IntPtr.Zero, 0, time);
+            }
+        }
+
+        #endregion
     }
-
-    #endregion
-
-    #region MonoBehaviour implementation
-
-    void Start()
-      => ChangeSource(_source);
-
-    void OnDestroy()
-    {
-        if (IsRecording) EndRecording();
-        Destroy(_buffer);
-    }
-
-    void Update()
-    {
-        if (!IsRecording) return;
-        if (!_timeQueue.TryEnqueueNow()) return;
-        Graphics.Blit(_source, _buffer, new Vector2(1, -1), new Vector2(0, 1));
-        AsyncGPUReadback.Request(_buffer, 0, OnSourceReadback);
-    }
-
-    #endregion
-}
 
 } // namespace Avfi

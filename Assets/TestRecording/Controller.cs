@@ -12,29 +12,32 @@ sealed class Controller : MonoBehaviour
         public float mouseY;
     }
 
-    [SerializeField] Text _buttonLabel = null;
+    [SerializeField]
+    RenderTexture _source = null;
+
+    [SerializeField]
+    Text _buttonLabel = null;
+
 
     Avfi.VideoRecorder _recorder = null;
-
-    NativeArray<byte> _metadata;
 
 
     void Start()
     {
         Application.targetFrameRate = 60;
-        _recorder = GetComponent<Avfi.VideoRecorder>();
 
-        _metadata = new NativeArray<byte>(UnsafeUtility.SizeOf<Metadata>(), Allocator.Persistent);
-        _recorder.Metadata = _metadata;
+        _recorder = new Avfi.VideoRecorder(_source);
     }
 
     void OnDestroy()
     {
-        _metadata.Dispose();
+        _recorder?.Dispose();
     }
 
     unsafe void Update()
     {
+        if (!_recorder.IsRecording) { return; }
+
         // Convert struct to native byte array
         var metadata = new Metadata
         {
@@ -42,11 +45,10 @@ sealed class Controller : MonoBehaviour
             mouseX = Input.mousePosition.x / Screen.width,
             mouseY = Input.mousePosition.y / Screen.height,
         };
-        UnsafeUtility.CopyStructureToPtr(ref metadata, _metadata.GetUnsafePtr());
+        using var buffer = new NativeArray<byte>(UnsafeUtility.SizeOf<Metadata>(), Allocator.Temp);
+        UnsafeUtility.CopyStructureToPtr(ref metadata, buffer.GetUnsafePtr());
 
-        // Get struct from native byte array
-        // var metadata2 = (Metadata*)_metadata.GetUnsafePtr();
-        // Debug.Log($"{metadata2->time} {metadata2->mouseX} {metadata2->mouseY}");
+        _recorder.Update(buffer);
     }
 
     public void OnPressRecordButton()
